@@ -1,34 +1,48 @@
 <?php
 
 namespace App\Library;
+use App\Library\BankIndonesiaScrapper as BankIndonesia;
+use App\Http\Models\KursModel;
 
 
 class ScrapperBaseService {
 
-  protected $url;
   protected $params;
-  protected $headers;
-  protected $options;
 
-  public function post(){
+  public function execute($paramsSearch){
+    switch ($paramsSearch['bankCode']) {
+      case 'BI':
+            // bank indonesia scrapper
+            $bankIndonesia = new BankIndonesia;
+            $response = $bankIndonesia->scrape($paramsSearch);
 
+        break;
+
+      default:
+        return false;
+        break;
+    }
+
+    if($response){
+      $this->insertRate($response);
+      return $response;
+    }
+
+    return false;
   }
 
-  public function get(){
+  private function insertRate($response){
+      if(KursModel::where('rate_date',$response[0]['rate_date'])->count()== 0){
+          if(KursModel::insert($response)){
+            return true;
+          }
+      }else{
+           KursModel::where('rate_date',$response[0]['rate_date'])->update(array('created_at'=>date('Y-m-d')));
+      }
 
+      return false;
   }
 
-  public function setUrl($url){
-    $this->url = $url;
-  }
-
-  public function setHeaders($headers=array()){
-    $this->headers = $headers;
-  }
-
-  public function setOptions($options=array()){
-    $this->options = $options;
-  }
 
 }
 

@@ -3,6 +3,7 @@
 namespace App\Library;
 
 use Goutte\Client;
+use App\Helper\DateHelper;
 
 class Scrapper {
 
@@ -14,38 +15,31 @@ class Scrapper {
   protected $xpath;
   protected $getValue;
   protected $nodeResp = [];
+  protected $date;
 
   public function __construct(){
     $this->client = new Client();
+    $this->date   = new DateHelper();
   }
 
 
-  public function action($bank){
+  public function action($paramsSearch){
 
-    switch ($bank) {
+    $crawler  = $this->client->request('GET', $this->url);
+
+    switch ($paramsSearch['bankCode']) {
       case 'BI':
-            $crawler = $this->client->request('GET', $this->url);
-            $form = $crawler->selectButton('Lihat')->form();
-            $crawler = $this->client->submit($form, $this->params);
-            $response = [];
-            foreach ($this->xpath as $key => $value) {
-              $this->getValue ='';
-              $crawler->filterXPath($value)->each(function ($node) {
-                $this->getValue[]= str_replace(' ','',$node->text());
-              });
-              $response[$key]=$this->getValue;
-            }
+        // get date
+        $crawler->filterXPath('//*[@id="ctl00_PlaceHolderMain_biWebKursTransaksiBI_lblUpdate"]')->each(function ($node) {
+          $this->dateUpdate = $node->text();
+        });
 
-            $i=0;
-            foreach ($response['currency'] as $key => $value) {
-              # code...
-              $arr[]=array('currency'=>$response['currency'][$i],
-                          'rate_sell'=>$response['rate_sell'][$i],
-                          'rate_buy'=>$response['rate_buy'][$i]
-                        );
-              $i++;
-            }
+        $expDate = explode(' ',$this->dateUpdate);
+        $newDate = $expDate[2].'-'.date('m',strtotime($this->date->monthIndoToEng($expDate[1]))).'-'.$expDate[0];
+        $newDateRate = date('Y-m-d',strtotime($newDate));
 
+        $form     = $crawler->selectButton('Lihat')->form();
+        $crawler  = $this->client->submit($form, $this->params);
         break;
 
       default:
@@ -53,9 +47,33 @@ class Scrapper {
         break;
     }
 
-    dd($arr);
 
-    return $response;
+
+    $response = [];
+    foreach ($this->xpath as $key => $value) {
+      $this->getValue ='';
+      $crawler->filterXPath($value)->each(function ($node) {
+        $this->getValue[]= str_replace(' ','',$node->text());
+      });
+      $response[$key]=$this->getValue;
+    }
+
+
+
+    $i=0;
+    $parsing=[];
+    foreach ($response['currency'] as $key => $value) {
+      $parsing[]=array('currency_code'=>$response['currency'][$i],
+                        'rate_sell'=>str_replace(',','',$response['rate_sell'][$i]),
+                        'rate_buy'=>str_replace(',','',$response['rate_buy'][$i]),
+                        'rate_date'=>$newDateRate,//$this->params[''],
+                        'bank_code'=>$paramsSearch['bankCode'],
+                        'created_at'=>date('Y-m-d')
+                );
+      $i++;
+    }
+
+    return $parsing;
   }
 
   public function setUrl($url){
